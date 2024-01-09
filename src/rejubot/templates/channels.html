@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Links for {{channel}}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+
+  <style>
+    :root {
+      --spacing: 5px;
+    }
+    li {
+      list-style-type: none !important;
+    }
+    input:checked + label {
+      text-decoration: line-through;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      background: url('/static/header.background.1.png') no-repeat center center;
+      background-color: #f2f5f1;
+      box-shadow: 0px 1px 5px #000000;
+    }
+
+    main {
+      padding: 0;
+    }
+
+    body>header {
+      padding: 0;
+      z-index: 1;
+    }
+
+    body>main {
+      padding-top: 0px;
+      z-index: 0;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+    }
+
+    h2 {
+      width: 100vw;
+      position: relative;
+      left: 50%;
+      right: 50%;
+      margin-left: -50vw;
+      margin-right: -50vw;
+      margin-top: 20px;
+      margin-bottom: 20px;
+
+      font-size: 24px;
+      /*margin: 10px 0 10px 0;*/
+      background-color: #ccc;
+      padding: 10px;
+      /*border-radius: 10px;*/
+      background: url('/static/day.background.2.png') no-repeat center center, linear-gradient(to bottom, #b5bab4, #f2f5f1);; /* Replace with your image path */
+      background-size: auto;
+      box-shadow: 0px 1px 5px #000000;
+    }
+
+    .header-content {
+      background-color: white;
+      border-radius: 10px;
+      padding: 0 10px 0 10px;
+      box-shadow: 0 10xpx;
+      box-shadow: 1px 1px 5px #000000;
+    }
+    
+    h3 {
+      font-size: 15px;
+      margin-bottom: 5px;
+    }
+    
+    /* Style the images */
+    img {
+      max-width: 100%;
+      height: auto;
+      margin-bottom: 10px;
+    }
+    
+    /* Style the list items */
+    li {
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #ccc;
+    }
+    
+    /* Style the descriptions */
+    p {
+      font-size: 16px;
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+    .url {
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+      padding: 10px;
+    }
+
+    div.grid {
+      column-gap: 15px;
+      row-gap: 15px;
+    }
+
+/* Targets devices with a maximum width of 767 pixels */
+@media (max-width: 767px) {
+  /* Your styles here */
+}
+
+/* Targets devices with a minimum width of 768 pixels and a maximum width of 991 pixels */
+@media (min-width: 768px) and (max-width: 991px) {
+  div.grid {
+    grid-template-columns: repeat(2, minmax(0%, 1fr));
+  }
+}
+
+/* Targets devices with a minimum width of 992 pixels and a maximum width of 1199 pixels */
+@media (min-width: 992px) and (max-width: 1199px) {
+  div.grid {
+    grid-template-columns: repeat(4, minmax(0%, 1fr));
+  }
+}
+
+/* Targets devices with a minimum width of 1200 pixels */
+@media (min-width: 1200px) {
+  div.grid {
+    grid-template-columns: repeat(5, minmax(0%, 1fr));
+  }
+}
+  </style>
+</head>
+<body>
+  <header>
+      <h1 class="container"><span class="header-content">Urls for {{channel}}</span></h1>
+  </header>
+  <main class="container">
+    {% for day,elements in days.items() %}
+      <h2><div class="container"><span class="header-content">{{ day }}</span></div></h2>
+      <div class="grid">
+        {% for element in elements %}
+          <div class="url">
+            <h3>{{ element.og_title }}</h3>
+            <img src="{{ element.og_image }}" alt="{{ element.title }}">
+            <p>{{ element.og_description }}</p>
+          </div>
+        {% endfor %}
+        </div>
+    {% endfor %}
+  </main>
+</body>
