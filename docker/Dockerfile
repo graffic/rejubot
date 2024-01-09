@@ -23,5 +23,6 @@ COPY src/rejubot/templates /project/pkgs/rejubot/templates
 COPY --from=builder /project/__pypackages__/3.11/lib /project/pkgs
 COPY --from=builder /project/__pypackages__/3.11/bin/* /bin/
 WORKDIR /project
+EXPOSE 8080/tcp
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisord.conf"]
