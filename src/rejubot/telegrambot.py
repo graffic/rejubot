@@ -17,7 +17,7 @@ from telegram.ext import (
     MessageHandler,
 )
 
-from rejubot.settings import Channel, Settings, load_channels
+from rejubot.settings import load_settings
 from rejubot.storage import UrlEntry, VideoEntry
 
 logger = logging.getLogger(__name__)
@@ -189,20 +189,19 @@ async def handle_membership(update: Update, context: CallbackContext):
         await context.bot.leave_chat(update.my_chat_member.chat.id)
 
 
-def create_app(token: str, channels: list[Channel]):
+def create_app(token: str, channels: dict[int, str]):
     app = ApplicationBuilder().token(token).build()
     app.add_handler(ChatMemberHandler(handle_membership))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.bot_data["channels"] = {chan.id: chan for chan in channels}
+    app.bot_data["channels"] = channels
     return app
 
 
 def run():
     logging_format = "%(levelname)s %(name)s %(message)s"
     logging.basicConfig(format=logging_format, level=logging.INFO)
-    settings = Settings()
-    channels = load_channels()
-    app = create_app(settings.telegram_token, channels)
+    settings = load_settings()
+    app = create_app(settings.telegram_token, settings.telegram_channels_by_id)
     engine = create_async_engine(settings.db_url)
     async_session = async_sessionmaker(engine, expire_on_commit=False)
     app.bot_data["async_session"] = async_session

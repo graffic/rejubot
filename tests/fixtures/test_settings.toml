@@ -1,0 +1,6 @@
+telegram_token = "a"
+db_url = "b"
+
+[telegram_channels]
+rejugando= 1
+development = 2

@@ -1,14 +1,13 @@
 from pathlib import Path
 
-from rejubot.settings import Channel, load_channels
+from rejubot.settings import load_settings
 
 FIXTURES_BASE = Path(__file__).parent / "fixtures"
 
 
-def test_load_channels_ok():
-    channels = load_channels(FIXTURES_BASE / "test_channels.toml")
-
-    assert channels == [
-        Channel(**dict(name="channel-a", id=42, public=True)),
-        Channel(**dict(name="channel-b", id=43, public=False)),
-    ]
+def test_load_settings_ok():
+    settings = load_settings(FIXTURES_BASE / "test_settings.toml")
+    assert settings.telegram_token == "a"
+    assert settings.db_url == "b"
+    assert settings.telegram_channels == {"rejugando": 1, "development": 2}
+    assert settings.telegram_channels_by_id == {1: "rejugando", 2: "development"}

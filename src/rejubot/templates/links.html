@@ -75,6 +75,11 @@
       font-size: 15px;
       margin-bottom: 5px;
     }
+
+    h4 {
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
     
     /* Style the images */
     img {
@@ -95,6 +100,16 @@
       font-size: 16px;
       line-height: 1.5;
       margin-bottom: 10px;
+    }
+    a.url {
+      display: block;
+      text-decoration: none; /* Remove underline */
+      --color: var(--color); /* Use the parent element's text color */
+      font-weight: normal; /* Use the parent element's font weight */
+    }
+    a.url:hover {
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+      transition: box-shadow 0.2s ease-in-out;
     }
     .url {
       border-radius: 10px;
@@ -136,19 +151,27 @@
 </head>
 <body>
   <header>
-      <h1 class="container"><span class="header-content">Urls for {{channel}}</span></h1>
+      <h1 class="container"><span class="header-content">Links from our community</span></h1>
   </header>
   <main class="container">
     {% for day,elements in days.items() %}
       <h2><div class="container"><span class="header-content">{{ day }}</span></div></h2>
       <div class="grid">
         {% for element in elements %}
-          <div class="url">
+
+          <a href="{{ element.url }}" target="_blank" class="url">
+            {% if element.og_title %}
+            <h4> {{ element.og_site}}</h4>
             <h3>{{ element.og_title }}</h3>
-            <img src="{{ element.og_image }}" alt="{{ element.title }}">
+            {% if element.og_image %}
+               <img src="{{ element.og_image }}" alt="{{ element.title }}">
+            {% endif %}
             <p>{{ element.og_description }}</p>
-            <a href="{{ element.url }}" target="_blank">{{ element.url }}</a>
-          </div>
+            {% else %}
+            <p>{{ element.message }}</p>
+            {% endif %}
+            
+          </a>
         {% endfor %}
         </div>
     {% endfor %}

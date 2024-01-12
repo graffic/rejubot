@@ -1,7 +1,0 @@
-[channel-a]
-id = 42
-public = true
-
-[channel-b]
-id = 43
-public = false

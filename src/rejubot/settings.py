@@ -1,31 +1,24 @@
 import os
 import tomllib
-from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import FieldValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class Channel(BaseModel):
-    name: str
-    id: int
-    public: bool
-
-
-def load_channels(from_file=os.environ.get("REJUBOT_CHANNELS")) -> list[Channel]:
-    if not from_file or not Path(from_file).exists():
-        raise FileNotFoundError(from_file)
-    with open(from_file, "rb") as input:
-        input_channels = tomllib.load(input)
-
-    results = []
-    for name, values in input_channels.items():
-        values["name"] = name
-        results.append(Channel.model_validate(values))
-    return results
 
 
 class Settings(BaseSettings):
     telegram_token: str
     db_url: str
+    telegram_channels: dict[str, int]
+    telegram_channels_by_id: dict[int, str] = {}
     model_config = SettingsConfigDict(env_prefix="REJUBOT_")
+
+    @field_validator("telegram_channels_by_id")
+    def telegram_channels_by_id_from_channels(cls, _, info: FieldValidationInfo):
+        return {v: k for k, v in info.data["telegram_channels"].items()}
+
+
+def load_settings(from_file=os.environ.get("REJUBOT_SETTINGS")) -> Settings:
+    with open(from_file, "rb") as input:
+        input_settings = tomllib.load(input)
+
+    return Settings.model_validate(input_settings)
