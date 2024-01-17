@@ -247,11 +247,10 @@ async def handle_message(update: Update, context: CallbackContext):
 
     if len(urls) == 0:
         return
-
-    for url in urls:
-        # Check in the database if the url was already posted in the last 24 hours.
-        async with context.bot_data["async_session"]() as session:
+    async with context.bot_data["async_session"]() as session:
+        for url in urls:
             await process_url(update.message, url, session)
+        await session.commit()
 
 
 async def handle_membership(update: Update, context: CallbackContext):
