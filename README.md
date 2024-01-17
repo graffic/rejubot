@@ -3,6 +3,11 @@
 * Run bot: `pdm run telegram`
 * Run web `pdm run web`
 
+## With docker
+
+* Build image: `docker build -f docker/Dockerfile . -t rejubot`
+* Run: `docker run --rm -it -v $PWD/config/:/project/config/ -p 8080:8080 rejubot`
+
 ## SQL Alchemy
 
 ### First migration
@@ -18,7 +23,7 @@ Useful just for a while
 
 ### Import data
 
-* Use Telegram Desktop to import data
+* Use Telegram Desktop to export data
 * filter the export with:
 ```
 jq '[.messages[] | select(any(.text_entities[]; .type == "link")) ]|reverse' result.json > all.urls.json

@@ -198,10 +198,29 @@ def create_entry(msg: Message, url: str, metadata: UrlMetadata | None) -> UrlEnt
     return entry
 
 
+IGNORED_HOSTNAMES = {"rejugan.do"}
+
+
+def should_skip_url(url: str) -> bool:
+    try:
+        hostname = url.split("/")[2]
+    except IndexError:
+        logger.warning("Invalid url %s", url)
+        # Log the issue but continue
+        return False
+    skip = hostname in IGNORED_HOSTNAMES
+    if skip:
+        logger.info("Skipping %s", url)
+    return skip
+
+
 async def process_url(message: Message, url: str, session: AsyncSession):
     """
     Process a single url into the database
     """
+
+    if should_skip_url(url):
+        return None
     # Check in the database if the url was already posted in the last 24 hours.
     query = (
         select(func.count("*"))
@@ -222,7 +241,7 @@ async def process_url(message: Message, url: str, session: AsyncSession):
 
 
 async def handle_message(update: Update, context: CallbackContext):
-    pprint(update.to_dict())
+    # pprint(update.to_dict())
     urls = get_telegram_urls(update)
     logger.info("Found %s urls", len(urls))
 
@@ -239,6 +258,7 @@ async def handle_membership(update: Update, context: CallbackContext):
     """
     Join only configured channels
     """
+    # pprint(update.to_dict())
     if not update.my_chat_member:
         return
     if update.my_chat_member.chat.id in context.bot_data["channels"]:
