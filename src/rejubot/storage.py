@@ -1,7 +1,7 @@
 from datetime import datetime
 from logging import getLogger
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -17,8 +17,8 @@ class VideoEntry(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     content_type: Mapped[str] = mapped_column(String(255))
-    width: Mapped[int] = mapped_column(Integer)
-    height: Mapped[int] = mapped_column(Integer)
+    width: Mapped[int] = mapped_column(Integer, nullable=True)
+    height: Mapped[int] = mapped_column(Integer, nullable=True)
     url: Mapped[str] = mapped_column(Text)
 
 
@@ -26,7 +26,9 @@ class UrlEntry(Base):
     __tablename__ = "url_entries"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    channel_id: Mapped[int] = mapped_column(index=True)
+    # Telegram asks for 64 bit signed integers
+    channel_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    message_id: Mapped[int] = mapped_column(BigInteger, index=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now(), index=True)
     who: Mapped[str] = mapped_column(String(255))
     who_id: Mapped[int] = mapped_column(BigInteger)
@@ -40,3 +42,6 @@ class UrlEntry(Base):
         ForeignKey("video_entries.id"), nullable=True
     )
     video: Mapped[VideoEntry | None] = relationship(uselist=False, cascade="all")
+
+
+Index(None, UrlEntry.channel_id, UrlEntry.message_id)

@@ -1,16 +1,19 @@
 import json
 import logging
+import operator
+import os
 from datetime import datetime
 from random import randint
 
 import fire
+import pytz
 import tabulate
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from telegram import Chat, Message, User
 
-from rejubot.settings import Settings, load_channels
+from rejubot.settings import load_settings
 from rejubot.storage import UrlEntry
-from rejubot.telegrambot import create_entry, scrape_og_metadata
+from rejubot.telegrambot import create_entry, process_url, scrape_og_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -30,36 +33,53 @@ def render_message(entries: list) -> str:
     return "".join(result)
 
 
-async def import_urls(channel_name: str, import_file: str):
+async def import_urls(channel_name: str, import_file: str, delete: bool = False):
     """
     Generate a month of urls for a channel, some days might not have any urls, others might have up to 20.
     """
 
-    settings = Settings()
+    settings = load_settings()
     engine = create_async_engine(settings.db_url)
     async_session = async_sessionmaker(engine, expire_on_commit=False)
 
-    channels = {e.name: e for e in load_channels()}
     # Check that channel_name is in channels
-    if (channel := channels.get(channel_name)) is None:
+    if (channel_id := settings.telegram_channels.get(channel_name)) is None:
         raise ValueError(f"Channel {channel_name} not found")
     imported_msgs = json.load(open(import_file))
     assert len(imported_msgs) > 0
-    # Clean the database for this channel
-    async with async_session() as session:
-        await session.execute(
-            UrlEntry.__table__.delete().where(UrlEntry.channel_id == channel.id)
-        )
-        await session.commit()
+    # Sort ascending by date_unixtime
+    imported_msgs.sort(key=operator.itemgetter("date_unixtime"))
+
+    # Convert the date to a datetime object with the right timezone
+    timezone = pytz.timezone("Europe/Madrid")
+    for msg in imported_msgs:
+        dt_in_tz = datetime.fromisoformat(msg["date"])
+        msg["date"] = timezone.localize(dt_in_tz).astimezone(pytz.utc)
+
+    # Delete the range of dates included in the imported messages
+    if delete:
+        async with async_session() as session:
+            first_date = imported_msgs[0]["date"]
+            last_date = imported_msgs[-1]["date"]
+            logger.info("Deleting entries between %s and %s", first_date, last_date)
+            res = await session.execute(
+                UrlEntry.__table__.delete()
+                .where(UrlEntry.channel_id == channel_id)
+                .where(UrlEntry.created_at.between(first_date, last_date))
+            )
+            logger.info("Deleted %d entries", res.rowcount)
+            await session.commit()
+
+    # Process each imported message
     async with async_session() as session:
         for msg in imported_msgs:
             message = Message(
                 message_id=msg["id"],
-                date=datetime.fromisoformat(msg["date"]),
-                chat=Chat(id=channel.id, type="channel", title=channel.name),
+                date=msg["date"],
+                chat=Chat(id=channel_id, type="channel", title=channel_name),
                 text=render_message(msg["text"]),
                 from_user=User(
-                    first_name=msg["from"], id=randint(1, 1000000), is_bot=False
+                    first_name=msg["from"] or "", id=randint(1, 1000000), is_bot=False
                 ),
             )
             for entity in msg["text_entities"]:
@@ -70,11 +90,29 @@ async def import_urls(channel_name: str, import_file: str):
                 if not url.startswith("http"):
                     continue
 
-                logger.info("Scraping %s", url)
-                metadata = await scrape_og_metadata(url)
-                entry = create_entry(message, url, metadata)
-                entry.created_at = datetime.fromisoformat(msg["date"])
-                session.add(entry)
+                await process_url(message, url, session)
+            # Save each url and continue
+            await session.commit()
+
+
+async def clear_urls(channel_name: str):
+    """
+    Deletes all the urls in a channel
+    """
+    settings = load_settings()
+    engine = create_async_engine(settings.db_url)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+    # Check that channel_name is in channels
+    if (channel_id := settings.telegram_channels.get(channel_name)) is None:
+        raise ValueError(f"Channel {channel_name} not found")
+
+    # Delete the range of dates included in the imported messages
+    async with async_session() as session:
+        res = await session.execute(
+            UrlEntry.__table__.delete().where(UrlEntry.channel_id == channel_id)
+        )
+        logger.info("Deleted %d entries", res.rowcount)
         await session.commit()
 
 
@@ -92,5 +130,10 @@ async def scrape_test(url: str):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
-    fire.Fire(dict(import_urls=import_urls, scrape_test=scrape_test))
+    logging_format = "%(levelname)s %(name)s %(message)s"
+    logging.basicConfig(format=logging_format, level=logging.INFO)
+    if os.environ.get("SQLALCHEMY_ECHO"):
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
+    fire.Fire(
+        dict(clear_urls=clear_urls, import_urls=import_urls, scrape_test=scrape_test)
+    )

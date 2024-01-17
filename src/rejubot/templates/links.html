@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Links for {{channel}}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
-  <script src="https://unpkg.com/htmx.org@1.9.6"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="https://unpkg.com/hyperscript.org@0.9.12"></script>
 
   <style>
     :root {
@@ -115,12 +116,30 @@
       border-radius: 10px;
       box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
       padding: 10px;
+      & video {
+        width: 100%;
+      }
+      & .author {
+        font-size: 12px;
+        color: #999;
+      }
     }
+
 
     div.grid {
       column-gap: 15px;
       row-gap: 15px;
     }
+
+    .loading {
+      display: none;
+      justify-content: center;
+      align-items: center;
+      margin: 20px 0 20px 0;
+    }
+    .loading.htmx-request{
+      display: flex;
+  }
 
 /* Targets devices with a maximum width of 767 pixels */
 @media (max-width: 767px) {
@@ -154,26 +173,9 @@
       <h1 class="container"><span class="header-content">Links from our community</span></h1>
   </header>
   <main class="container">
-    {% for day,elements in days.items() %}
-      <h2><div class="container"><span class="header-content">{{ day }}</span></div></h2>
-      <div class="grid">
-        {% for element in elements %}
-
-          <a href="{{ element.url }}" target="_blank" class="url">
-            {% if element.og_title %}
-            <h4> {{ element.og_site}}</h4>
-            <h3>{{ element.og_title }}</h3>
-            {% if element.og_image %}
-               <img src="{{ element.og_image }}" alt="{{ element.title }}">
-            {% endif %}
-            <p>{{ element.og_description }}</p>
-            {% else %}
-            <p>{{ element.message }}</p>
-            {% endif %}
-            
-          </a>
-        {% endfor %}
-        </div>
-    {% endfor %}
+    {% include 'links_days.html' %}
+    <div class="loading">
+      <img src="/static/puff.svg" width="100" />
+    </div>
   </main>
 </body>

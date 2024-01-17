@@ -13,6 +13,19 @@ Useful just for a while
 2. Run `pdm run alembic revision --autogenerate -m "First version"`
 3. Run `pdm run alembic upgrade head`
 
+
+## Admin
+
+### Import data
+
+* Use Telegram Desktop to import data
+* filter the export with:
+```
+jq '[.messages[] | select(any(.text_entities[]; .type == "link")) ]|reverse' result.json > all.urls.json
+```
+* The exported timestamps are in the timezone of the client. In this case UTC+1
+
+
 # Next steps
 
-* Try the dynamic load of urls, per day
+* Jump to a specific date

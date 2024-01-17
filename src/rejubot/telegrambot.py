@@ -1,13 +1,17 @@
+import asyncio
 import logging
+import os
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pprint import pprint
 
 import aiohttp
 import telegram.ext.filters as filters
 import validators
 from bs4 import BeautifulSoup
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from telegram import Message, Update
 from telegram.constants import ChatMemberStatus, MessageEntityType
 from telegram.ext import (
@@ -31,14 +35,14 @@ def get_meta(soup: BeautifulSoup, property: str) -> str | None:
     meta = soup.find("meta", property=property)
     if not meta:
         return None
-    return meta["content"]
+    return meta.get("content")
 
 
 def get_meta_name(soup: BeautifulSoup, name: str) -> str | None:
     meta = soup.find("meta", attrs=dict(name=name))
     if not meta:
         return None
-    return meta["content"]
+    return meta.get("content")
 
 
 @dataclass
@@ -53,19 +57,7 @@ class UrlMetadata:
     video_height: int | None
 
 
-async def scrape_og_metadata(url: str) -> UrlMetadata | None:
-    if not url.startswith("http"):
-        url = f"http://{url}"
-
-    url = re.sub(r"^https://(x|twitter)\.com", "https://vxtwitter.com", url)
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url, headers=HEADERS) as response:
-                html = await response.text()
-        except aiohttp.ClientError:
-            logger.exception("Error scraping %s", url)
-            return None
-    logger.debug(html)
+async def scrape_og_metadata_html(html: str, url: str) -> UrlMetadata | None:
     soup = BeautifulSoup(html, "html.parser")
     gets = lambda prop: get_meta(soup, prop)
     gets_name = lambda prop: get_meta_name(soup, prop)
@@ -83,6 +75,10 @@ async def scrape_og_metadata(url: str) -> UrlMetadata | None:
 
     video_url = gets("og:video")
     video_type = gets("og:video:type")
+    # Some times there is a video link without a type, meaning it is another
+    # website. So it is not a real video.
+    if not video_type:
+        video_url = None
     video_width = gets("og:video:width")
     video_height = gets("og:video:height")
 
@@ -99,6 +95,51 @@ async def scrape_og_metadata(url: str) -> UrlMetadata | None:
         video_width=video_width,
         video_height=video_height,
     )
+
+
+async def scrape_og_metadata(url: str) -> UrlMetadata | None:
+    if not url.startswith("http"):
+        url = f"http://{url}"
+
+    url = re.sub(r"^https://(x|twitter)\.com", "https://vxtwitter.com", url)
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(20)) as session:
+        try:
+            async with session.get(url, headers=HEADERS) as response:
+                content_type = response.headers.get("Content-Type")
+                await response.read()
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            logger.exception("Error scraping %s", url)
+            return None
+    if not content_type:
+        logger.warning("No content type for %s", url)
+        return None
+    if content_type.startswith("text/html"):
+        return await scrape_og_metadata_html(await response.text(errors="ignore"), url)
+    elif content_type.startswith("image/"):
+        return UrlMetadata(
+            site=None,
+            title=None,
+            description=None,
+            image=url,
+            video_url=None,
+            video_type=None,
+            video_width=None,
+            video_height=None,
+        )
+    elif content_type.startswith("video/"):
+        return UrlMetadata(
+            site=None,
+            title=None,
+            description=None,
+            image=None,
+            video_url=url,
+            video_type=content_type,
+            video_width=None,
+            video_height=None,
+        )
+    else:
+        logger.warning("Unknown content type %s for %s", content_type, url)
+        return None
 
 
 def get_telegram_urls(update: Update) -> set[str]:
@@ -124,7 +165,6 @@ def get_telegram_urls(update: Update) -> set[str]:
 
 
 def create_entry(msg: Message, url: str, metadata: UrlMetadata | None) -> UrlEntry:
-    channel_id = msg.chat_id
     who = msg.from_user.first_name
     if msg.from_user.last_name:
         who += f" {msg.from_user.last_name}"
@@ -132,7 +172,13 @@ def create_entry(msg: Message, url: str, metadata: UrlMetadata | None) -> UrlEnt
     message = msg.text_html
 
     entry = UrlEntry(
-        channel_id=channel_id, who=who, who_id=who_id, message=message, url=url
+        channel_id=msg.chat_id,
+        message_id=msg.message_id,
+        who=who,
+        who_id=who_id,
+        message=message,
+        url=url,
+        created_at=msg.date,
     )
     if not metadata:
         return entry
@@ -152,6 +198,29 @@ def create_entry(msg: Message, url: str, metadata: UrlMetadata | None) -> UrlEnt
     return entry
 
 
+async def process_url(message: Message, url: str, session: AsyncSession):
+    """
+    Process a single url into the database
+    """
+    # Check in the database if the url was already posted in the last 24 hours.
+    query = (
+        select(func.count("*"))
+        .where(UrlEntry.url == url)
+        .where(UrlEntry.created_at > message.date - timedelta(days=1))
+    )
+    res = (await session.scalars(query)).first()
+    if res > 0:
+        logger.info("Url %s already posted in the last 24h, skipping", url)
+        return None
+
+    logger.info("Scraping %s", url)
+    metadata = await scrape_og_metadata(url)
+    entry = create_entry(message, url, metadata)
+
+    logger.info("Storing entry: %s", url)
+    session.add(entry)
+
+
 async def handle_message(update: Update, context: CallbackContext):
     pprint(update.to_dict())
     urls = get_telegram_urls(update)
@@ -159,17 +228,11 @@ async def handle_message(update: Update, context: CallbackContext):
 
     if len(urls) == 0:
         return
-    entries = []
-    for url in urls:
-        logger.info("Scraping %s", url)
-        metadata = await scrape_og_metadata(url)
-        entry = create_entry(update.message, url, metadata)
-        entries.append(entry)
 
-    async with context.bot_data["async_session"]() as session:
-        logger.info("Storing %d entries", len(entries))
-        session.add_all(entries)
-        await session.commit()
+    for url in urls:
+        # Check in the database if the url was already posted in the last 24 hours.
+        async with context.bot_data["async_session"]() as session:
+            await process_url(update.message, url, session)
 
 
 async def handle_membership(update: Update, context: CallbackContext):
@@ -185,7 +248,9 @@ async def handle_membership(update: Update, context: CallbackContext):
         return
     if update.my_chat_member.new_chat_member.status == ChatMemberStatus.MEMBER:
         # Joined to a channel notin the list
-        logger.warning("Invited to the wrong channel, leaving.")
+        logger.warning(
+            "Invited to the wrong channel %d, leaving.", update.my_chat_member.chat.id
+        )
         await context.bot.leave_chat(update.my_chat_member.chat.id)
 
 
@@ -200,6 +265,8 @@ def create_app(token: str, channels: dict[int, str]):
 def run():
     logging_format = "%(levelname)s %(name)s %(message)s"
     logging.basicConfig(format=logging_format, level=logging.INFO)
+    if os.environ.get("SQLALCHEMY_ECHO"):
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
     settings = load_settings()
     app = create_app(settings.telegram_token, settings.telegram_channels_by_id)
     engine = create_async_engine(settings.db_url)

@@ -1,0 +1,47 @@
+{%if days|length == 0 %}
+<h2>  
+  <div class="container">
+    <span class="header-content">The End</span>
+  </div>
+</h2>
+{% endif %}
+{% for day,elements,last in days %}
+<h2><div class="container"><span class="header-content">{{ day }}</span></div></h2>
+<div class="grid"
+{% if last %}
+  hx-get="/links?partial_after={{day}}"
+  hx-trigger="revealed"
+  hx-swap="afterend"
+  hx-indicator=".loading"
+{% endif %}
+>
+
+  {% for element in elements %}
+    <a href="{{ element.url }}" target="_blank" class="url">
+      {% if element.og_site %}
+      <h4> {{ element.og_site}}</h4>
+      {% endif %}
+      {% if element.og_title %}
+      <h3>{{ element.og_title }}</h3>
+      {% endif %}
+      {% if element.og_image %}
+         <img src="{{ element.og_image }}" alt="{{ element.title }}">
+      {% endif %}
+      {% if element.video %}
+         <video controls _="on click halt default">
+           <source src="{{ element.video.url }}" type="{{ element.video.content_type }}">
+           Your browser does not support the video tag.
+         </video>
+      {% endif %}
+      {% if element.og_description %}
+      <p>{{ element.og_description }}</p>
+      {% else %}
+      <p>{{ element.message }}</p>
+      {% endif %}
+      <p class="author">By {{ element.who }}</p>
+    </a>
+  {% endfor %}
+  {% if last %}
+  {% endif %}
+</div>
+{% endfor %}

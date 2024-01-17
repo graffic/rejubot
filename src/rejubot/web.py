@@ -1,14 +1,15 @@
 import logging
+import os
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import joinedload
 
 from rejubot.settings import load_settings
 from rejubot.storage import UrlEntry
@@ -21,6 +22,8 @@ base = Path(__file__).parent
 async def lifespan(app: FastAPI) -> None:  # pylint: disable=W0612
     logging_format = "%(levelname)s %(name)s %(message)s"
     logging.basicConfig(format=logging_format, level=logging.INFO)
+    if os.environ.get("SQLALCHEMY_ECHO"):
+        logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
     settings = load_settings()
     engine = create_async_engine(settings.db_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -47,35 +50,49 @@ templates = Jinja2Templates(directory=base / "templates")
 @app.get("/links", response_class=HTMLResponse)
 async def read_item(
     request: Request,
+    partial_after: str = "",
     db: AsyncSession = Depends(get_session),
-    channels: dict[str, id] = Depends(get_channels),
 ):
-    # From next day to 7 days ago
-    start = (datetime.now() + timedelta(days=1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    end = start - timedelta(days=30)
+    # Find the last 7 days
+    query = select(func.date(UrlEntry.created_at))
+    if partial_after:
+        query = query.where(func.date(UrlEntry.created_at) < partial_after)
+    query = query.distinct().order_by(func.date(UrlEntry.created_at).desc()).limit(7)
+    result = (await db.scalars(query)).all()
 
+    entries_by_day = []
+    if len(result) != 0:
+        entries_by_day = await get_url_entries(db, result[0], result[-1])
+
+    template = "links.html"
+    if partial_after:
+        template = "links_days.html"
+    return templates.TemplateResponse(
+        template, dict(request=request, days=entries_by_day)
+    )
+
+
+async def get_url_entries(db, first_day, last_day):
     query = (
         select(UrlEntry)
-        .where(
-            UrlEntry.created_at.between(end, start),
-        )
+        .where(func.date(UrlEntry.created_at).between(last_day, first_day))
         .order_by(UrlEntry.created_at.desc())
-    )
+    ).options(joinedload(UrlEntry.video))
     result = await db.scalars(query)
 
     # Group entries by day
-    entries_by_day = {}
+    entries_by_day = []
+    current_day = None
+    entries = None
     for entry in result.all():
         day = entry.created_at.date()
-        if day not in entries_by_day:
-            entries_by_day[day] = []
-        entries_by_day[day].append(entry)
-
-    return templates.TemplateResponse(
-        "links.html", dict(request=request, days=entries_by_day)
-    )
+        if day != current_day:
+            current_day = day
+            entries = []
+            entries_by_day.append([current_day, entries, False])
+        entries.append(entry)
+    entries_by_day[-1][2] = True
+    return entries_by_day
 
 
 @app.get("/")
