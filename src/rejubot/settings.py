@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     db_url: str
     telegram_channels: dict[str, int]
     telegram_channels_by_id: dict[int, str] = {}
-    model_config = SettingsConfigDict(env_prefix="REJUBOT_")
+    error_chat_id: int
+    model_config = SettingsConfigDict(env_prefix="REJUBOT_", extra="ignore")
 
     @field_validator("telegram_channels_by_id")
     def telegram_channels_by_id_from_channels(cls, _, info: FieldValidationInfo):

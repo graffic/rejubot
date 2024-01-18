@@ -1,9 +1,12 @@
 import asyncio
+import html
+import json
 import logging
 import os
 import re
+import traceback
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pprint import pprint
 
 import aiohttp
@@ -13,15 +16,16 @@ from bs4 import BeautifulSoup
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from telegram import Message, Update
-from telegram.constants import ChatMemberStatus, MessageEntityType
+from telegram.constants import ChatMemberStatus, MessageEntityType, ParseMode
 from telegram.ext import (
     ApplicationBuilder,
     CallbackContext,
     ChatMemberHandler,
+    ContextTypes,
     MessageHandler,
 )
 
-from rejubot.settings import load_settings
+from rejubot.settings import Settings, load_settings
 from rejubot.storage import UrlEntry, VideoEntry
 
 logger = logging.getLogger(__name__)
@@ -142,14 +146,14 @@ async def scrape_og_metadata(url: str) -> UrlMetadata | None:
         return None
 
 
-def get_telegram_urls(update: Update) -> set[str]:
+def get_telegram_urls(message: Message) -> set[str]:
     results = set()
-    msg = update.message.text
+    msg_text = message.text
     # Guard condition
-    if not msg.strip():
+    if not msg_text.strip():
         return results
 
-    for ent, text in update.message.parse_entities().items():
+    for ent, text in message.parse_entities().items():
         if ent.type != MessageEntityType.URL:
             continue
         if not text.startswith("http"):
@@ -241,15 +245,19 @@ async def process_url(message: Message, url: str, session: AsyncSession):
 
 
 async def handle_message(update: Update, context: CallbackContext):
-    # pprint(update.to_dict())
-    urls = get_telegram_urls(update)
+    message = update.message or update.edited_message
+    if message is None:
+        return
+
+    urls = get_telegram_urls(message)
     logger.info("Found %s urls", len(urls))
 
     if len(urls) == 0:
         return
+
     async with context.bot_data["async_session"]() as session:
         for url in urls:
-            await process_url(update.message, url, session)
+            await process_url(message, url, session)
         await session.commit()
 
 
@@ -273,11 +281,47 @@ async def handle_membership(update: Update, context: CallbackContext):
         await context.bot.leave_chat(update.my_chat_member.chat.id)
 
 
-def create_app(token: str, channels: dict[int, str]):
-    app = ApplicationBuilder().token(token).build()
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    # traceback.format_exception returns the usual python message about an exception, but as a
+    # list of strings rather than a single string, so we have to join them together.
+    tb_list = traceback.format_exception(
+        None, context.error, context.error.__traceback__
+    )
+    tb_string = "".join(tb_list)
+
+    # Build the message with some markup and additional information about what happened.
+    # You might need to add some logic to deal with messages longer than the 4096 character limit.
+    update_str = update.to_dict() if isinstance(update, Update) else str(update)
+    message = (
+        "An exception was raised while handling an update\n"
+        f'<pre><code class="language-json">update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}'
+        "</code></pre>\n\n"
+        '<pre><code class="language-python">\n'
+        f"context.chat_data = {html.escape(str(context.chat_data))}\n"
+        f"context.user_data = {html.escape(str(context.user_data))}\n"
+        "</code></pre>"
+        f"<pre>{html.escape(tb_string)}</pre>"
+    )
+
+    # Finally, send the message
+    await context.bot.send_message(
+        chat_id=context.bot_data["error_chat_id"],
+        text=message,
+        parse_mode=ParseMode.HTML,
+    )
+
+
+def create_app(settings: Settings, async_session: async_sessionmaker):
+    app = ApplicationBuilder().token(settings.telegram_token).build()
     app.add_handler(ChatMemberHandler(handle_membership))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.bot_data["channels"] = channels
+    app.add_error_handler(error_handler)
+
+    app.bot_data["channels"] = settings.telegram_channels_by_id
+    app.bot_data["error_chat_id"] = settings.error_chat_id
+    app.bot_data["async_session"] = async_session
+
     return app
 
 
@@ -286,12 +330,12 @@ def run():
     logging.basicConfig(format=logging_format, level=logging.INFO)
     if os.environ.get("SQLALCHEMY_ECHO"):
         logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
+
     settings = load_settings()
-    app = create_app(settings.telegram_token, settings.telegram_channels_by_id)
     engine = create_async_engine(settings.db_url)
     async_session = async_sessionmaker(engine, expire_on_commit=False)
-    app.bot_data["async_session"] = async_session
 
+    app = create_app(settings, async_session)
     app.run_polling()
 
 
