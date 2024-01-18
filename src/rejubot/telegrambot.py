@@ -74,7 +74,7 @@ async def scrape_og_metadata_html(html: str, url: str) -> UrlMetadata | None:
         og_title = gets("og:title")
 
     og_image = gets("og:image")
-    if og_image == "0":
+    if og_image == "0" or og_image == "null":
         og_image = None
 
     video_url = gets("og:video")
