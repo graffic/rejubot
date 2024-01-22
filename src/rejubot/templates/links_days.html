@@ -1,12 +1,12 @@
 {%if days|length == 0 %}
 <h2>  
   <div class="container">
-    <span class="header-content">The End</span>
+    <span class="header-title">The End</span>
   </div>
 </h2>
 {% endif %}
 {% for day,elements,last in days %}
-<h2><div class="container"><span class="header-content">{{ day }}</span></div></h2>
+<h2><div class="container"><span class="header-title">{{ day }}</span></div></h2>
 <div class="grid"
 {% if last %}
   hx-get="/links?partial_after={{day}}"

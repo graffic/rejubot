@@ -43,6 +43,11 @@
     h1 {
       margin-bottom: 20px;
     }
+    header h1 {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
 
     h2 {
       width: 100vw;
@@ -64,12 +69,17 @@
       box-shadow: 0px 1px 5px #000000;
     }
 
-    .header-content {
+    .header-title {
       background-color: white;
       border-radius: 10px;
       padding: 0 10px 0 10px;
-      box-shadow: 0 10xpx;
       box-shadow: 1px 1px 5px #000000;
+      display: inline;
+    }
+
+    header .header-title {
+      line-height: normal;
+      margin: 10px 0 10px 0;
     }
     
     h3 {
@@ -125,6 +135,14 @@
       }
     }
 
+    .day-selector {
+     margin:0;
+     padding:0 10px 0 10px;
+     display:inline;
+     width: auto;
+     height: 100%;
+    }
+
 
     div.grid {
       column-gap: 15px;
@@ -139,7 +157,10 @@
     }
     .loading.htmx-request{
       display: flex;
-  }
+    }
+    dialog article .close {
+      margin-bottom: 10px;
+    }
 
 /* Targets devices with a maximum width of 767 pixels */
 @media (max-width: 767px) {
@@ -170,7 +191,32 @@
 </head>
 <body>
   <header>
-      <h1 class="container"><span class="header-content">Links from our community</span></h1>
+      <h1 class="container">
+        <span class="header-title">Enlaces de la comunidad</span>
+        <button class="day-selector"
+         _="on click toggle @open on #day-modal">
+         Ir al dia...
+      </button>
+        <!-- Modal -->
+        <dialog id="day-modal">
+          <article>
+            <a href="#close"
+              aria-label="Close"
+              class="close"
+              _="on click remove @open from #day-modal">
+            </a>
+
+            <p>
+              <input type="date" id="modal-date" value="{{ today }}" max="{{ today }}"/>
+            </p>
+            <footer>
+              <button href="#confirm" _="on click set window.location.search to '?from_date='+ #modal-date.value">
+                Ir
+              </button>
+            </footer>
+          </article>
+        </dialog>
+      </h1>
   </header>
   <main class="container">
     {% include 'links_days.html' %}

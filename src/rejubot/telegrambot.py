@@ -25,6 +25,7 @@ from telegram.ext import (
     MessageHandler,
 )
 
+from rejubot.logging import setup_logging
 from rejubot.settings import Settings, load_settings
 from rejubot.storage import UrlEntry, VideoEntry
 
@@ -326,10 +327,7 @@ def create_app(settings: Settings, async_session: async_sessionmaker):
 
 
 def run():
-    logging_format = "%(levelname)s %(name)s %(message)s"
-    logging.basicConfig(format=logging_format, level=logging.INFO)
-    if os.environ.get("SQLALCHEMY_ECHO"):
-        logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
+    setup_logging
 
     settings = load_settings()
     engine = create_async_engine(settings.db_url)

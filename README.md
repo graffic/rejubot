@@ -33,4 +33,4 @@ jq '[.messages[] | select(any(.text_entities[]; .type == "link")) ]|reverse' res
 
 # Next steps
 
-* Jump to a specific date
+* `ddinstagram` links with videos do not have a full url in the video url.

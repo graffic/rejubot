@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -11,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import joinedload
 
+from rejubot.logging import setup_logging
 from rejubot.settings import load_settings
 from rejubot.storage import UrlEntry
 
@@ -20,10 +22,8 @@ base = Path(__file__).parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> None:  # pylint: disable=W0612
-    logging_format = "%(levelname)s %(name)s %(message)s"
-    logging.basicConfig(format=logging_format, level=logging.INFO)
-    if os.environ.get("SQLALCHEMY_ECHO"):
-        logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
+    setup_logging()
+
     settings = load_settings()
     engine = create_async_engine(settings.db_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -50,13 +50,17 @@ templates = Jinja2Templates(directory=base / "templates")
 @app.get("/links", response_class=HTMLResponse)
 async def read_item(
     request: Request,
-    partial_after: str = "",
+    partial_after: date = None,
+    from_date: date = None,
     db: AsyncSession = Depends(get_session),
 ):
+    if from_date is None:
+        from_date = datetime.now().date()
     # Find the last 7 days
     query = select(func.date(UrlEntry.created_at))
-    if partial_after:
-        query = query.where(func.date(UrlEntry.created_at) < partial_after)
+    if partial_after or from_date:
+        base_date = partial_after or from_date
+        query = query.where(func.date(UrlEntry.created_at) < base_date)
     query = query.distinct().order_by(func.date(UrlEntry.created_at).desc()).limit(7)
     result = (await db.scalars(query)).all()
 
@@ -67,8 +71,10 @@ async def read_item(
     template = "links.html"
     if partial_after:
         template = "links_days.html"
+    # Format today's date as year-month-day
+    today = datetime.now().strftime("%Y-%m-%d")
     return templates.TemplateResponse(
-        template, dict(request=request, days=entries_by_day)
+        template, dict(request=request, days=entries_by_day, today=today)
     )
 
 
