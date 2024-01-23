@@ -58,9 +58,10 @@ async def read_item(
         from_date = datetime.now().date()
     # Find the last 7 days
     query = select(func.date(UrlEntry.created_at))
-    if partial_after or from_date:
-        base_date = partial_after or from_date
-        query = query.where(func.date(UrlEntry.created_at) < base_date)
+    if partial_after:
+        query = query.where(func.date(UrlEntry.created_at) < partial_after)
+    elif from_date:
+        query = query.where(func.date(UrlEntry.created_at) <= from_date)
     query = query.distinct().order_by(func.date(UrlEntry.created_at).desc()).limit(7)
     result = (await db.scalars(query)).all()
 
