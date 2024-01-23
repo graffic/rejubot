@@ -7,4 +7,5 @@ def setup_logging():
     logging.basicConfig(format=logging_format, level=logging.INFO)
     if os.environ.get("SQLALCHEMY_ECHO"):
         logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
-    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    # Telegram bot uses httpx, and httpx logs every request in info level
+    logging.getLogger("httpx").setLevel(logging.WARNING)

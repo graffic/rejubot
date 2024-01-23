@@ -327,7 +327,7 @@ def create_app(settings: Settings, async_session: async_sessionmaker):
 
 
 def run():
-    setup_logging
+    setup_logging()
 
     settings = load_settings()
     engine = create_async_engine(settings.db_url)

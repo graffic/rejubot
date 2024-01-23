@@ -75,6 +75,7 @@
       padding: 0 10px 0 10px;
       box-shadow: 1px 1px 5px #000000;
       display: inline;
+      color: rgb(27, 40, 50);
     }
 
     header .header-title {
@@ -118,6 +119,7 @@
       --color: var(--color); /* Use the parent element's text color */
       font-weight: normal; /* Use the parent element's font weight */
     }
+
     a.url:hover {
       box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
       transition: box-shadow 0.2s ease-in-out;
@@ -161,7 +163,17 @@
     dialog article .close {
       margin-bottom: 10px;
     }
+    /* Dark mode */
+    @media (prefers-color-scheme: dark) {
+      .url {
+        background-color: #333;
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.4);
+      }
+      a.url:hover {
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
 
+      }
+    }
 /* Targets devices with a maximum width of 767 pixels */
 @media (max-width: 767px) {
   /* Your styles here */

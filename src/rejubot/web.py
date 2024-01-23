@@ -54,8 +54,6 @@ async def read_item(
     from_date: date = None,
     db: AsyncSession = Depends(get_session),
 ):
-    if from_date is None:
-        from_date = datetime.now().date()
     # Find the last 7 days
     query = select(func.date(UrlEntry.created_at))
     if partial_after:
