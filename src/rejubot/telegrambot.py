@@ -2,12 +2,10 @@ import asyncio
 import html
 import json
 import logging
-import os
 import re
 import traceback
 from dataclasses import dataclass
 from datetime import timedelta
-from pprint import pprint
 
 import aiohttp
 import telegram.ext.filters as filters
@@ -70,11 +68,12 @@ async def scrape_og_metadata_html(html: str, url: str) -> UrlMetadata | None:
     if url.startswith("https://vxtwitter.com"):
         og_site = "Twitter / X"
         og_title = gets_name("twitter:title")
+        og_image = gets_name("twitter:image")
     else:
         og_site = gets("og:site_name")
         og_title = gets("og:title")
+        og_image = gets("og:image")
 
-    og_image = gets("og:image")
     if og_image == "0" or og_image == "null":
         og_image = None
 
@@ -266,7 +265,6 @@ async def handle_membership(update: Update, context: CallbackContext):
     """
     Join only configured channels
     """
-    # pprint(update.to_dict())
     if not update.my_chat_member:
         return
     if update.my_chat_member.chat.id in context.bot_data["channels"]:
