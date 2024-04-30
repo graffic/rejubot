@@ -151,15 +151,19 @@ async def repair_metadata(regex_filter: str = None):
         if regex_filter:
             query = query.where(UrlEntry.url.regexp_match(regex_filter))
 
-        urls: list[UrlEntry] = await session.scalars(query)
+        urls: list[UrlEntry] = (
+            await session.scalars(query.order_by(UrlEntry.created_at.desc()))
+        ).all()
 
-        for url in urls:
-            logger.info(f"Updating metadata for {url.url}")
+        for idx, url in enumerate(urls):
+            logger.info(
+                f"Updating metadata {idx}/{len(urls)} {url.created_at.date()} {url.url}"
+            )
             metadata = await scrape_og_metadata(url.url)
             if metadata is None:
                 continue
             assign_metadata(url, metadata)
-        await session.commit()
+            await session.commit()
 
 
 def main():
