@@ -186,7 +186,10 @@ def create_entry(msg: Message, url: str, metadata: UrlMetadata | None) -> UrlEnt
     )
     if not metadata:
         return entry
+    return assign_metadata(entry, metadata)
 
+
+def assign_metadata(entry: UrlEntry, metadata: UrlMetadata) -> UrlEntry:
     entry.og_description = metadata.description
     entry.og_image = metadata.image
     entry.og_site = metadata.site

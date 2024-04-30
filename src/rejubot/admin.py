@@ -2,18 +2,25 @@ import json
 import logging
 import operator
 import os
+import re
 from datetime import datetime
 from random import randint
 
 import fire
 import pytz
 import tabulate
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from telegram import Chat, Message, User
 
 from rejubot.settings import load_settings
 from rejubot.storage import UrlEntry
-from rejubot.telegrambot import create_entry, process_url, scrape_og_metadata
+from rejubot.telegrambot import (
+    assign_metadata,
+    create_entry,
+    process_url,
+    scrape_og_metadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,11 +136,42 @@ async def scrape_test(url: str):
     print(tabulate.tabulate(table, tablefmt="simple_grid"))
 
 
+async def repair_metadata(regex_filter: str = None):
+    """
+    Repair the metadata of the urls
+    """
+    logger.info(f"Repairing metadata for {regex_filter}")
+    settings = load_settings()
+    engine = create_async_engine(settings.db_url)
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+    regex = re.compile(regex_filter) if regex_filter else None
+
+    async with async_session() as session:
+        query = select(UrlEntry)
+        if regex_filter:
+            query = query.where(UrlEntry.url.regexp_match(regex_filter))
+
+        urls: list[UrlEntry] = await session.scalars(query)
+
+        for url in urls:
+            logger.info(f"Updating metadata for {url.url}")
+            metadata = await scrape_og_metadata(url.url)
+            if metadata is None:
+                continue
+            assign_metadata(url, metadata)
+        await session.commit()
+
+
 def main():
     logging_format = "%(levelname)s %(name)s %(message)s"
     logging.basicConfig(format=logging_format, level=logging.INFO)
     if os.environ.get("SQLALCHEMY_ECHO"):
         logging.getLogger("sqlalchemy.engine").setLevel(logging.INFO)
     fire.Fire(
-        dict(clear_urls=clear_urls, import_urls=import_urls, scrape_test=scrape_test)
+        dict(
+            clear_urls=clear_urls,
+            import_urls=import_urls,
+            scrape_test=scrape_test,
+            repair_metadata=repair_metadata,
+        )
     )
